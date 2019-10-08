@@ -44,7 +44,7 @@ So if you save this in `test.py`:
 
 You can execute it like this:
 
-    $ p test.py 
+    $ python test.py
     total 104
     drwxr-xr-x   2 root root  4096 aoû 20  2018 bin
     drwxr-xr-x   4 root root  4096 aoû 25  2018 boot
