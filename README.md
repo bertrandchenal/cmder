@@ -8,7 +8,7 @@ It is inspired by [amoffat's sh](https://github.com/amoffat/sh) module.
 ## Example usage
 
 The basic usage is to use the magic object `sh`, that lets you
-instatie command objects and run them:
+instantiate command objects and run them:
 
     >>> from conquer import sh
     >>> sh.pwd()
@@ -33,7 +33,7 @@ with `+`, `-` or `/` (windows style):
     boot
     dev
 
-You can instatiate Cmd object manually, by default they print stdout
+You can instantiate Cmd object manually, by default they print stdout
 and stderr to the respective streams of current process.
 
 So if you save this in `test.py`:
