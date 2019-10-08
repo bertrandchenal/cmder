@@ -70,23 +70,30 @@ class Streamer:
 class Cmd:
 
     def __init__(self, cmd, *args):
-        if WIN and not cmd.endswith('.exe'):
-            cmd += '.exe'
-        # Resolve full path
-        cmd_path = None
-        for p in os.environ.get('PATH', '').split(os.pathsep):
-            if not os.path.isdir(p):
-                continue
-            if cmd in os.listdir(p):
-                cmd_path = Path(p) / cmd
-                break
+        if os.path.isfile(cmd):
+            self.cmd_path = cmd
         else:
-            raise Exception(f'Command not found: {cmd}')
-        self.cmd_path = cmd_path
+            if WIN and not cmd.endswith('.exe'):
+                cmd += '.exe'
+            # Resolve full path
+            cmd_path = None
+            for p in os.environ.get('PATH', '').split(os.pathsep):
+                if not os.path.isdir(p):
+                    continue
+                if cmd in os.listdir(p):
+                    cmd_path = Path(p) / cmd
+                    break
+            else:
+                raise Exception(f'Command not found: {cmd}')
+            self.cmd_path = cmd_path
+
         self.args = args
         self.stdin = None
         self.stdout = None
         self.stderr = None
+
+    def clone(self, *extra_args):
+        return Cmd(self.cmd_path, *(self.args + extra_args))
 
     def setup(self, stdin=None, stdout=None, stderr=None):
         if not self.stdin:
@@ -129,12 +136,34 @@ class Cmd:
 
     def pipe(self, cmd, *args):
         # Chain IO
-        other = Cmd(cmd, *args)
+        if not isinstance(cmd, Cmd):
+            other = Cmd(cmd, *args)
+        elif args:
+            other = cmd.clone(*args)
+        else:
+            other = cmd
         out_stream = Streamer()
         self.setup(stdout=out_stream)
         threading.Thread(target=self.run).start()
         other.setup(stdin=out_stream)
         return other
+
+
+    def __add__(self, arg):
+        return self.clone(arg)
+
+    def __sub__(self, arg):
+        return self.clone('-' + arg)
+
+    def __truediv__(self, arg):
+        return self.clone('/' + arg)
+
+    def __or__(self, other):
+        return self.pipe(other)
+
+    def __str__(self):
+        args = ' '.join(self.args)
+        return f'{self.cmd_path} {args}'
 
 
 class SH:
