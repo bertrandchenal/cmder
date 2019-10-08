@@ -38,9 +38,11 @@ and stderr to the respective streams of current process.
 
 So if you save this in `test.py`:
 
-    from conquer import Cmd
-    cmd = Cmd('ls', '-l', '/').pipe('head', '-3')
-    cmd.run()
+```python
+from conquer import Cmd
+cmd = Cmd('ls', '-l', '/').pipe('head', '-3')
+cmd.run()
+```
 
 You can execute it like this:
 
