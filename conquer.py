@@ -10,6 +10,7 @@ import threading
 SENTINEL = object()
 WIN = platform.system() == 'Windows'
 
+
 class Streamer:
 
     def __init__(self, stream=None):
@@ -54,7 +55,6 @@ class Streamer:
             except ValueError:
                 # read raises a ValueError on closed stream
                 pass
-
 
     def _plug(self, out_stream):
         if isinstance(out_stream, Streamer):
@@ -148,7 +148,6 @@ class Cmd:
         other.setup(stdin=out_stream)
         return other
 
-
     def __add__(self, arg):
         return self.clone(arg)
 
@@ -172,7 +171,6 @@ class SH:
         return Cmd(name)
 
 sh = SH()
-
 
 
 if __name__ == '__main__':
