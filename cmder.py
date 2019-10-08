@@ -2,12 +2,13 @@ from pathlib import Path
 from queue import Queue
 import io
 import os
+import platform
 import subprocess
 import sys
 import threading
 
 SENTINEL = object()
-
+WIN = platform.system() == 'Windows'
 
 class Streamer:
 
@@ -69,9 +70,13 @@ class Streamer:
 class Cmd:
 
     def __init__(self, cmd, *args):
+        if WIN and not cmd.endswith('.exe'):
+            cmd += '.exe'
         # Resolve full path
         cmd_path = None
         for p in os.environ.get('PATH', '').split(os.pathsep):
+            if not os.path.isdir(p):
+                continue
             if cmd in os.listdir(p):
                 cmd_path = Path(p) / cmd
                 break
@@ -101,7 +106,7 @@ class Cmd:
 
     def run(self, *extra_args):
         process = subprocess.Popen(
-            (self.cmd_path,) + self.args + extra_args,
+            (str(self.cmd_path),) + self.args + extra_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
