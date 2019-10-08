@@ -50,8 +50,6 @@ class Streamer:
                     out_stream.write(chunk)
             try:
                 out_stream.flush()
-                if not isinstance(out_stream, io.BytesIO):
-                    out_stream.close()
             except ValueError:
                 # read raises a ValueError on closed stream
                 pass
