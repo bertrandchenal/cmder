@@ -132,7 +132,7 @@ class Cmd:
             if isinstance(self.stdin, Streamer):
                 self.stdin.plug(process.stdin, autoclose=True)
             else:
-                Streamer(self.stdin).plug(process.stdin)
+                Streamer(self.stdin).plug(process.stdin, autoclose=True)
 
         errcode = process.wait()
         process.stdin.close()
