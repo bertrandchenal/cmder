@@ -24,14 +24,40 @@ instantiate command objects and run them:
     [...]
 
 
+## Command flags through magic methods
+
 You can also compose commands with `|` and add argument to commands
 with `+`, `-` or `/` (windows style):
 
-    >>> cmd = sh.ls + "/" - "1" | sh.head - '3'
+    >>> cmd = sh.git +"status" -"s" | sh.head -3
     >>> print(cmd())
-    bin
-    boot
-    dev
+	M README.md
+	M conquer.py
+	?? out.txt
+
+Because of operator precedence, long options wont work, in this case
+the `+` operator is a better fit:
+
+```
+>>> cmd = sh.ls --version  # Fail with "TypeError: bad operand type for unary -: 'str'"
+>>> cmd = sh.ls + '--version' | sh.head -2
+>>> print(cmd())
+ls (GNU coreutils) 8.30
+Copyright © 2018 Free Software Foundation, Inc.
+```
+
+## Redirections
+
+Conquer also let you redirect stdin and stdout:
+
+```python
+sh.ls() > 'out.txt'       # Redirect output to file
+cmd =  sh.wc < 'out.txt'  # Use file as stdin
+print(cmd())              # Same result as running `ls | wc`
+```
+
+
+## Low-level API
 
 You can instantiate Cmd object manually, by default they print stdout
 and stderr to the respective streams of current process.

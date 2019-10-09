@@ -35,7 +35,7 @@ class Streamer:
             # read raises a ValueError on closed stream
             pass
 
-    def writer(self, generator, out_stream):
+    def writer(self, generator, out_stream, autoclose=False):
         if isinstance(out_stream, Queue):
             # handle queues
             for chunk in generator:
@@ -50,17 +50,20 @@ class Streamer:
                     out_stream.write(chunk)
             try:
                 out_stream.flush()
+                if autoclose:
+                    out_stream.close()
             except ValueError:
+                raise
                 # read raises a ValueError on closed stream
                 pass
 
-    def _plug(self, out_stream):
+    def _plug(self, out_stream, autoclose=False):
         if isinstance(out_stream, Streamer):
             out_stream = out_stream.in_stream
-        self.writer(self.reader(self.in_stream), out_stream)
+        self.writer(self.reader(self.in_stream), out_stream, autoclose=autoclose)
 
-    def plug(self, out_stream):
-        t = threading.Thread(target=self._plug, args=(out_stream,))
+    def plug(self, out_stream, autoclose=False):
+        t = threading.Thread(target=self._plug, args=(out_stream, autoclose))
         t.start()
         return t
 
@@ -105,9 +108,14 @@ class Cmd:
         out_buff = io.BytesIO()
         out_stream = Streamer()
         out_stream.plug(out_buff)
-        self.setup(stdout=out_stream)
-        self.run(*extra_args)
-        return out_buff.getvalue().decode()
+        err_buff = io.BytesIO()
+        err_stream = Streamer()
+        err_stream.plug(err_buff)
+
+        self.setup(stdout=out_stream, stderr=err_stream)
+        errcode = self.run(*extra_args)
+        return Result(errcode, out_buff.getvalue(),
+                      err_buff.getvalue())
 
     def run(self, *extra_args):
         process = subprocess.Popen(
@@ -122,7 +130,7 @@ class Cmd:
         Streamer(process.stderr).plug(self.stderr or sys.stderr)
         if self.stdin:
             if isinstance(self.stdin, Streamer):
-                self.stdin.plug(process.stdin)
+                self.stdin.plug(process.stdin, autoclose=True)
             else:
                 Streamer(self.stdin).plug(process.stdin)
 
@@ -150,10 +158,10 @@ class Cmd:
         return self.clone(arg)
 
     def __sub__(self, arg):
-        return self.clone('-' + arg)
+        return self.clone(f'-{arg}')
 
     def __truediv__(self, arg):
-        return self.clone('/' + arg)
+        return self.clone(f'/{arg}')
 
     def __or__(self, other):
         return self.pipe(other)
@@ -161,6 +169,29 @@ class Cmd:
     def __str__(self):
         args = ' '.join(self.args)
         return f'{self.cmd_path} {args}'
+
+    def __lt__(self, other):
+        self.setup(stdin=open(other, 'rb'))
+        return self
+
+
+class Result:
+
+    def __init__(self, errcode, stdout, stderr):
+        self.errcode = errcode
+        self.stdout = stdout
+        self.stderr = stderr
+
+    def __str__(self):
+        return self.stdout.decode()
+
+    def __repr__(self):
+        return f'<Result(errorcode={self.errcode})>'
+
+    def __gt__(self, other):
+        with open(other, 'wb') as fh:
+            fh.write(self.stdout)
+        return self.errcode
 
 
 class SH:
