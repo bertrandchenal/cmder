@@ -13,8 +13,9 @@ WIN = platform.system() == 'Windows'
 
 class Streamer:
 
-    def __init__(self, stream=None):
+    def __init__(self, stream=None, name=None):
         self.in_stream = Queue() if stream is None else stream
+        self.name = name or id(self)
 
     def reader(self, in_stream):
         # handle queues
@@ -43,19 +44,13 @@ class Streamer:
             out_stream.put(SENTINEL)
         else:
             # handle buffers
+            mode = getattr(out_stream, 'mode', None)
+            write = out_stream.buffer.write if mode == 'w' else out_stream.write
             for chunk in generator:
-                if getattr(out_stream, 'mode', None) == 'w':
-                    out_stream.buffer.write(chunk)
-                else:
-                    out_stream.write(chunk)
-            try:
+                write(chunk)
                 out_stream.flush()
-                if autoclose:
-                    out_stream.close()
-            except ValueError:
-                raise
-                # read raises a ValueError on closed stream
-                pass
+            if autoclose:
+                out_stream.close()
 
     def _plug(self, out_stream, autoclose=False):
         if isinstance(out_stream, Streamer):
@@ -92,32 +87,40 @@ class Cmd:
         self.stdin = None
         self.stdout = None
         self.stderr = None
+        self.parent = None
 
     def clone(self, *extra_args):
         return Cmd(self.cmd_path, *(self.args + extra_args))
 
     def setup(self, stdin=None, stdout=None, stderr=None):
-        if not self.stdin:
+        if stdin:
             self.stdin = stdin
-        if not self.stdout:
+        if stdout:
             self.stdout = stdout
-        if not self.stderr:
+        if stderr:
             self.stderr = stderr
 
     def __call__(self, *extra_args):
+        # Create buffers for stderr and stdout
         out_buff = io.BytesIO()
-        out_stream = Streamer()
-        out_stream.plug(out_buff)
         err_buff = io.BytesIO()
-        err_stream = Streamer()
-        err_stream.plug(err_buff)
-
+        # And plug them
+        out_stream = Streamer(name='stdout call buffer')
+        out_thread = out_stream.plug(out_buff)
+        err_stream = Streamer(name='stderr call buffer')
+        err_thread = err_stream.plug(err_buff)
         self.setup(stdout=out_stream, stderr=err_stream)
+        # Run subprocess
         errcode = self.run(*extra_args)
+        # Wait for stream to finish their job
+        out_thread.join()
+        err_thread.join()
         return Result(errcode, out_buff.getvalue(),
                       err_buff.getvalue())
 
     def run(self, *extra_args):
+
+        # Start subprocess
         process = subprocess.Popen(
             (str(self.cmd_path),) + self.args + extra_args,
             stdout=subprocess.PIPE,
@@ -126,18 +129,35 @@ class Cmd:
         )
 
         # Plug io
-        Streamer(process.stdout).plug(self.stdout or sys.stdout)
-        Streamer(process.stderr).plug(self.stderr or sys.stderr)
+        out_thread = Streamer(process.stdout, name=str(self)).plug(self.stdout or sys.stdout)
+        err_thread = Streamer(
+            process.stderr,
+            name=str(self) + ' - stderr',
+        ).plug(self.stderr or sys.stderr)
         if self.stdin:
             if isinstance(self.stdin, Streamer):
                 self.stdin.plug(process.stdin, autoclose=True)
             else:
                 Streamer(self.stdin).plug(process.stdin, autoclose=True)
 
+        # Start parent
+        parent_thread = None
+        if self.parent:
+            parent_thread = threading.Thread(target=self.parent.run).start()
+
+        # Wait for process to finish
         errcode = process.wait()
+        # Wait for streamers to finish
+        out_thread.join()
+        err_thread.join()
+        # Close file descriptors
         process.stdin.close()
         process.stdout.close()
         process.stderr.close()
+        # Close parent thread
+        if parent_thread:
+            parent_thread.join()
+
         return errcode
 
     def pipe(self, cmd, *args):
@@ -148,11 +168,15 @@ class Cmd:
             other = cmd.clone(*args)
         else:
             other = cmd
-        out_stream = Streamer()
-        self.setup(stdout=out_stream)
-        threading.Thread(target=self.run).start()
-        other.setup(stdin=out_stream)
+        pipe_stream = Streamer(name='pipe')
+        self.setup(stdout=pipe_stream)
+        other.setup(stdin=pipe_stream)
+        other.set_parent(self)
         return other
+
+    def set_parent(self, parent):
+        assert self.parent is None
+        self.parent = parent
 
     def __add__(self, arg):
         return self.clone(arg)
