@@ -17,11 +17,11 @@ class Streamer:
         self.in_stream = Queue() if stream is None else stream
         self.name = name or id(self)
 
-    def reader(self, in_stream):
+    def reader(self):
         # handle queues
-        if isinstance(in_stream, Queue):
+        if isinstance(self.in_stream, Queue):
             while True:
-                chunk = in_stream.get()
+                chunk = self.in_stream.get()
                 if chunk == SENTINEL:
                     return
                 yield chunk
@@ -54,8 +54,9 @@ class Streamer:
 
     def _plug(self, out_stream, autoclose=False):
         if isinstance(out_stream, Streamer):
+            # Daisy chain streams
             out_stream = out_stream.in_stream
-        self.writer(self.reader(self.in_stream), out_stream, autoclose=autoclose)
+        self.writer(self.reader(), out_stream, autoclose=autoclose)
 
     def plug(self, out_stream, autoclose=False):
         t = threading.Thread(target=self._plug, args=(out_stream, autoclose))
@@ -119,7 +120,6 @@ class Cmd:
                       err_buff.getvalue())
 
     def run(self, *extra_args):
-
         # Start subprocess
         process = subprocess.Popen(
             (str(self.cmd_path),) + self.args + extra_args,
@@ -129,7 +129,10 @@ class Cmd:
         )
 
         # Plug io
-        out_thread = Streamer(process.stdout, name=str(self)).plug(self.stdout or sys.stdout)
+        out_thread = Streamer(
+            process.stdout,
+            name=str(self)
+        ).plug(self.stdout or sys.stdout)
         err_thread = Streamer(
             process.stderr,
             name=str(self) + ' - stderr',
@@ -160,7 +163,23 @@ class Cmd:
 
         return errcode
 
-    def pipe(self, cmd, *args):
+    def pipe(self, something, *args):
+        if isinstance(something, Cmd):
+            return self.pipe_cmd(something, *args)
+        elif callable(something):
+            return self.pipe_func(something, *args)
+        else:
+            raise ValueError('Unable to pipe to type: "%s"' % type(something))
+
+    def pipe_func(self, fn):
+        func = Func(fn)
+        pipe_stream = Streamer(name='func pipe')
+        self.setup(stdout=pipe_stream)
+        func.setup(stdin=pipe_stream)
+        func.set_parent(self)
+        return func
+
+    def pipe_cmd(self, cmd, *args):
         # Chain IO
         if not isinstance(cmd, Cmd):
             other = Cmd(cmd, *args)
@@ -168,7 +187,7 @@ class Cmd:
             other = cmd.clone(*args)
         else:
             other = cmd
-        pipe_stream = Streamer(name='pipe')
+        pipe_stream = Streamer(name='cmd pipe')
         self.setup(stdout=pipe_stream)
         other.setup(stdin=pipe_stream)
         other.set_parent(self)
@@ -199,7 +218,49 @@ class Cmd:
         return self
 
 
-class Result:
+class Func:
+
+    def __init__(self, fn, *args):
+        self.fn = fn
+        self.args = args
+        self.stdin = None
+        self.stdout = None
+        self.stderr = None
+        self.parent = None
+
+    def pipe(self, cmd):
+        pipe_stream = Streamer(name='func pipe')
+        self.setup(stdout=pipe_stream)
+        cmd.setup(stdin=pipe_stream)
+        cmd.set_parent(self)
+        return cmd
+
+    def run(self):
+        for chunk in self.fn(*self.args):
+            self.stdout.in_stream.put(chunk.encode())
+        self.stdout.in_stream.put(SENTINEL)
+
+    def set_parent(self, parent):
+        self.parent = parent
+
+    def setup(self, stdin=None, stdout=None, stderr=None):
+        if stdin:
+            self.stdin = stdin
+        if stdout:
+            self.stdout = stdout
+        if stderr:
+            self.stderr = stderr
+
+    def __call__(self, *extra_args):
+        self.parent.run()
+        for chunk in self.stdin.reader():
+            yield self.fn(chunk.decode(), *self.args)
+
+    def __or__(self, other):
+        return self.pipe(other)
+
+
+class Result: ## TODO inherit bytes
 
     def __init__(self, errcode, stdout, stderr):
         self.errcode = errcode
