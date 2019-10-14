@@ -254,7 +254,7 @@ class Func:
         return self.pipe(other)
 
 
-class Result: ## TODO inherit bytes
+class Result:
 
     def __init__(self, errcode, stdout, stderr):
         self.errcode = errcode
@@ -263,6 +263,11 @@ class Result: ## TODO inherit bytes
 
     def __str__(self):
         return self.stdout.decode()
+
+    def __eq__(self, other):
+        if isinstance(other, bytes):
+            return self.stdout == other
+        return self.stdout.decode() == other
 
     def __repr__(self):
         return f'<Result(errorcode={self.errcode})>'

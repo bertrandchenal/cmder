@@ -8,4 +8,4 @@ def test_func_tail():
 def test_func_head():
     fn = lambda: map(str, range(10))
     cmd = Func(fn) | sh.cat
-    assert str(cmd()) == '0123456789'
+    assert cmd() == '0123456789'
