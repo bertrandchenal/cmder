@@ -27,14 +27,14 @@ class Streamer:
                 yield chunk
 
         # handles buffers
-        try:
-            for chunk in iter(lambda: self.in_stream.readline(2048), ""):
-                if not chunk:
-                    return
-                yield chunk
-        except ValueError:
-            # read raises a ValueError on closed stream
-            pass
+        for chunk in iter(lambda: self.in_stream.readline(2048), ""):
+            if not chunk:
+                return
+            yield chunk
+        # try:
+        # except ValueError:
+        #     # readline raises a ValueError on closed stream
+        #     pass
 
     def writer(self, generator, out_stream, autoclose=False):
         if isinstance(out_stream, Queue):
@@ -106,16 +106,9 @@ class Cmd:
         out_buff = io.BytesIO()
         err_buff = io.BytesIO()
         # And plug them
-        out_stream = Streamer(name='stdout call buffer')
-        out_thread = out_stream.plug(out_buff)
-        err_stream = Streamer(name='stderr call buffer')
-        err_thread = err_stream.plug(err_buff)
-        self.setup(stdout=out_stream, stderr=err_stream)
+        self.setup(stdout=out_buff, stderr=err_buff)
         # Run subprocess
         errcode = self.run(*extra_args)
-        # Wait for stream to finish their job
-        out_thread.join()
-        err_thread.join()
         return Result(errcode, out_buff.getvalue(),
                       err_buff.getvalue())
 
@@ -138,6 +131,7 @@ class Cmd:
             name=str(self) + ' - stderr',
         ).plug(self.stderr or sys.stderr)
         if self.stdin:
+            # XXX stdin should be a queue (or a buffer), not a stream!
             if isinstance(self.stdin, Streamer):
                 self.stdin.plug(process.stdin, autoclose=True)
             else:
