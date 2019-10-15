@@ -5,7 +5,15 @@ def test_func_tail():
     assert tuple(cmd()) == ('HAM\n', 'SPAM\n')
 
 
+def fn():
+    for i in range(10):
+        print('fn', i)
+        yield str(i)
+
 def test_func_head():
-    fn = lambda: map(str, range(10))
     cmd = Func(fn) | sh.cat
-    assert cmd() == '0123456789'
+    res = cmd()
+    print(res.stdout)
+    assert res == '0123456789'
+
+test_func_head()

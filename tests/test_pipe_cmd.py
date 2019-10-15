@@ -4,6 +4,14 @@ def test_base():
     cmd = sh.echo + "ham\nspam" | sh.head - '1'
     assert str(cmd()).strip() == 'ham'
 
+def test_implicit_cmd():
+    cmd = sh.echo + "ham\nspam" | 'wc'
+    assert str(cmd()).strip() == '2       2       9'
+
+    cmd = sh.echo + "ham\nspam"
+    cmd = cmd.pipe('wc', '-l')
+    assert str(cmd()).strip() == '2'
+
 
 def test_redirect():
     # Put two lines in a file
