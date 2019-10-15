@@ -7,7 +7,6 @@ def test_func_tail():
 
 def fn():
     for i in range(10):
-        print('fn', i)
         yield str(i)
 
 def test_func_head():
