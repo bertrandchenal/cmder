@@ -110,6 +110,9 @@ class Cmd:
         return Cmd(self.cmd_path, *(self.args + extra_args))
 
     def __call__(self, *extra_args):
+        return self.communicate(extra_args)
+
+    def communicate(self, extra_args=tuple()):
         process = self.run(extra_args)
 
         # Create buffers for stderr and stdout
@@ -286,4 +289,4 @@ sh = SH()
 
 
 if __name__ == '__main__':
-    Cmd(*sys.argv[1:]).run()
+    print(Cmd(*sys.argv[1:]).communicate())
