@@ -95,6 +95,7 @@ class Cmd:
             str(self.cmd_path),
             self.args + extra_args,
             stdin=stdin,
+            stderr=sys.stderr,
         )
 
         if parent_proc:
@@ -185,14 +186,20 @@ class Process:
         self.to_join = []
 
     def push_stdout(self, output):
+        if not self.process.stdout:
+            return
         thread = Streamer(self.process.stdout).plug(output)
         self.to_join.append(thread)
 
     def push_stderr(self, output):
+        if not self.process.stderr:
+            return
         thread = Streamer(self.process.stderr).plug(output)
         self.to_join.append(thread)
 
     def pull_stdin(self, input_):
+        if not self.process.stdin:
+            return
         thread = Streamer(input_).plug(self.process.stdin, autoclose=True)
         self.to_join.append(thread)
 
@@ -200,7 +207,8 @@ class Process:
         self.errcode = self.process.wait()
         for thread in self.to_join:
             thread.join()
-        for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
+        for stream in (self.process.stdin, self.process.stdout,
+                       self.process.stderr):
             if not stream:
                 continue
             stream.close()
