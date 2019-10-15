@@ -1,5 +1,4 @@
 from pathlib import Path
-from queue import Queue
 import io
 import os
 import platform
@@ -7,14 +6,13 @@ import subprocess
 import sys
 import threading
 
-SENTINEL = object()
 WIN = platform.system() == 'Windows'
 
 
 class Streamer:
 
     def __init__(self, stream=None, name=None):
-        self.in_stream = Queue() if stream is None else stream
+        self.in_stream = stream
         self.name = name or id(self)
 
     def reader(self):
