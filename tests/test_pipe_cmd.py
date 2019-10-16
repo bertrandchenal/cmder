@@ -6,7 +6,7 @@ def test_base():
 
 def test_implicit_cmd():
     cmd = sh.echo + "ham\nspam" | 'wc'
-    assert str(cmd()).strip() == '2       2       9'
+    assert str(cmd()).split()[0] == '2'
 
     cmd = sh.echo + "ham\nspam"
     cmd = cmd.pipe('wc', '-l')

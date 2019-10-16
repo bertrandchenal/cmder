@@ -3,9 +3,9 @@ from conquer import sh, Func
 
 
 def test_chatty():
-    cmd = sh.python +'tests/chatty.py' | sh.wc
+    cmd = sh.python +'tests/chatty.py' | sh.wc -'l'
     res = cmd().stdout
-    assert res.strip() == b'2000    2000    7780'
+    assert res.strip() == b'2000'
 
 def fn():
     for i in range(3):
@@ -14,6 +14,6 @@ def fn():
         sleep(1)
 
 def test_slow_func():
-    cmd = Func(fn) | sh.wc
+    cmd = Func(fn) | sh.wc -'w'
     res = cmd().stdout
-    assert res.strip() == b'0       1      30'
+    assert res.strip() == b'1'

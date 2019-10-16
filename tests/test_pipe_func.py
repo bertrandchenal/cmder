@@ -2,7 +2,8 @@ from conquer import sh, Func
 
 def test_func_tail():
     cmd = (sh.echo + '-e' + 'ham\nspam') | str.upper
-    assert tuple(cmd()) == ('HAM\n', 'SPAM\n')
+    for res, exp in zip(cmd(), ('HAM', 'SPAM')):
+        assert res.strip() == exp
 
 
 def fn():
