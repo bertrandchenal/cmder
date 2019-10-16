@@ -13,7 +13,6 @@ def fn():
 def test_func_head():
     cmd = Func(fn) | sh.cat
     res = cmd()
-    print(res.stdout)
     assert res == '0123456789'
 
 test_func_head()
