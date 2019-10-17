@@ -263,6 +263,9 @@ class Result:
         self.stdout = stdout
         self.stderr = stderr
 
+    def success(self):
+        return self.errcode == 0
+
     def __str__(self):
         return self.stdout.decode()
 
