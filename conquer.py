@@ -2,11 +2,14 @@ from pathlib import Path
 import io
 import os
 import platform
+import types
 import subprocess
 import sys
 import threading
 
+
 WIN = platform.system() == 'Windows'
+ellipsis = lambda x: x if len(x) < 40 else x[:40] + '...'
 
 
 class Streamer:
@@ -24,8 +27,12 @@ class Streamer:
                 yield chunk
 
         # handle iterable
-        else:
+        elif isinstance(self.in_stream, types.GeneratorType):
             yield from self.in_stream
+        else:
+            raise ValueError(
+                f'Unable to consume "{self.in_stream}" of type '
+                f'{type(self.in_stream)} as stream input')
 
     def writer(self, generator, out_stream, autoclose=False):
         if hasattr(out_stream, 'write'):
@@ -83,27 +90,23 @@ class Cmd:
         '''
         parent_proc = parent_func = stdin = None
         if self.redirect_stdin:
-            stdin = open(self.redirect_stdin, 'rb')
+            stdin = self.redirect_stdin
         elif self.parent and isinstance(self.parent, Cmd):
             parent_proc = self.parent.run()
             stdin = parent_proc.process.stdout
         elif self.parent and isinstance(self.parent, Func):
-            parent_func = self.parent.run(extra_args)
-            stdin = subprocess.PIPE
+            parent_func = self.parent.run()
+            stdin = parent_func
 
         proc = Process(
             str(self.cmd_path),
             self.args + extra_args,
             stdin=stdin,
-            stderr=sys.stderr,
         )
 
         if parent_proc:
             # Will eventually close fd's
             parent_proc.detach()
-        elif parent_func:
-            proc.pull_stdin(parent_func)# -> todo close stdin in some way
-
         return proc
 
     def clone(self, *extra_args):
@@ -119,7 +122,7 @@ class Cmd:
         out_buff = io.BytesIO()
         process.push_stdout(out_buff)
         err_buff = io.BytesIO()
-        process.push_stderr(out_buff)
+        process.push_stderr(err_buff)
         process.wait()
         return Result(process.errcode, out_buff.getvalue(),
                       err_buff.getvalue())
@@ -148,7 +151,7 @@ class Cmd:
         elif callable(something):
             return self.pipe_func(something, *args)
         else:
-            raise ValueError('Unable to pipe to type: "%s"' % type(something))
+            raise ValueError(f'Unable to pipe to type: "{type(something)}"')
 
     def set_parent(self, parent):
         assert self.parent is None
@@ -171,22 +174,31 @@ class Cmd:
         return f'{self.cmd_path} {args}'
 
     def __lt__(self, other):
-        self.redirect_stdin = other
+        if isinstance(other, Result):
+            self.redirect_stdin = io.BytesIO(other.stdout)
+        else:
+            self.redirect_stdin = open(other, 'rb')
         return self
 
 
 class Process:
 
-    def __init__(self, cmd, args, stdin=None, stdout=None, stderr=None):
+    def __init__(self, cmd, args, stdin=None):
         self.cmd = cmd
+
+        # Check if stdin is a readable filehandle
+        is_stdin_fh = isinstance(stdin, io.BufferedReader)
         self.process = subprocess.Popen(
             (cmd,) + args,
-            stdout=stdout or subprocess.PIPE,
-            stderr=stderr or subprocess.PIPE,
-            stdin=stdin or subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=stdin if is_stdin_fh else subprocess.PIPE,
         )
+
         self.errcode = None
         self.to_join = []
+        if stdin is not None and not is_stdin_fh:
+            self.pull_stdin(stdin)
 
     def push_stdout(self, output):
         if not self.process.stdout:
@@ -201,8 +213,6 @@ class Process:
         self.to_join.append(thread)
 
     def pull_stdin(self, input_):
-        if not self.process.stdin:
-            return
         thread = Streamer(input_).plug(self.process.stdin, autoclose=True)
         self.to_join.append(thread)
 
@@ -234,7 +244,7 @@ class Func:
         cmd.set_parent(self)
         return cmd
 
-    def run(self, args):
+    def run(self, args=tuple()):
         if self.parent:
             parent_proc = self.parent.run()
             stdin = parent_proc.process.stdout
@@ -263,6 +273,7 @@ class Result:
         self.stdout = stdout
         self.stderr = stderr
 
+    @property
     def success(self):
         return self.errcode == 0
 
@@ -275,13 +286,24 @@ class Result:
         return self.stdout.decode() == other
 
     def __repr__(self):
-        return f'<Result(errorcode={self.errcode})>'
+        extra = ''
+        if self.stdout:
+            stdout = ellipsis(repr(self.stdout)[2:-1])
+            extra += f" stdout='{stdout}'"
+        if self.stderr:
+            stderr = ellipsis(repr(self.stderr)[2:-1])
+            extra += f" stderr='{stderr}'"
+        return f'<Result(errorcode={self.errcode}{extra})>'
 
     def __gt__(self, other):
-        with open(other, 'wb') as fh:
-            fh.write(self.stdout)
-        return self.errcode
-
+        if isinstance(other, Cmd):
+            return other.__lt__(self)
+        elif isinstance(other, (str, bytes)):
+            with open(other, 'wb') as fh:
+                fh.write(self.stdout)
+            return self.errcode
+        else:
+            raise ValueError(f'Unable to pipe "{other}" of type "{type(other)}"')
 
 class SH:
 

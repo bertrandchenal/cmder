@@ -13,5 +13,5 @@ def test_pipe():
     expected = [7780, 2000, 3]
     with futures.ThreadPoolExecutor() as executor:
         for res, exp in zip(executor.map(cmd, args), expected):
-            assert res.success()
+            assert res.success
             assert exp == int(res.stdout)
