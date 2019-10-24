@@ -40,7 +40,7 @@ class Streamer:
                 f'Unable to consume "{self.in_stream}" of type '
                 f'{type(self.in_stream)} as stream input')
 
-    def writer(self, generator, out_stream, autoclose=False):
+    def writer(self, generator, out_stream):
         if hasattr(out_stream, 'write'):
             # handle buffers
             has_buff = hasattr(out_stream, 'buffer')
@@ -48,19 +48,20 @@ class Streamer:
             for chunk in generator:
                 write(chunk)
                 out_stream.flush()
-            if autoclose:
-                out_stream.close()
         else:
             raise ValueError('Can not handle "%s"' % out_stream)
 
-    def _plug(self, out_stream, autoclose=False):
+    def _plug(self, out_stream, callback=None):
         if isinstance(out_stream, Streamer):
             # Daisy chain streams
             out_stream = out_stream.in_stream
-        self.writer(self.reader(), out_stream, autoclose=autoclose)
+        self.writer(self.reader(), out_stream)
+        if callback:
+            callback()
 
-    def plug(self, out_stream, autoclose=False):
-        t = threading.Thread(target=self._plug, args=(out_stream, autoclose))
+
+    def plug(self, out_stream, callback=None):
+        t = threading.Thread(target=self._plug, args=(out_stream, callback))
         t.start()
         return t
 
@@ -111,7 +112,6 @@ class Cmd:
         )
 
         if parent_proc:
-            # Will eventually close fd's
             parent_proc.detach()
         return proc
 
@@ -217,7 +217,8 @@ class Process:
         self.to_join.append(thread)
 
     def pull_stdin(self, input_):
-        thread = Streamer(input_).plug(self.process.stdin, autoclose=True)
+        thread = Streamer(input_).plug(
+            self.process.stdin, callback=self.process.stdin.close)
         self.to_join.append(thread)
 
     def wait(self):
@@ -246,7 +247,7 @@ class Func:
     def pipe(self, other):
         assert isinstance(other, (Cmd, RemoteCmd))
         other.set_parent(self)
-        return cmd
+        return other
 
     def run(self, args=tuple()):
         if self.parent:
@@ -300,7 +301,7 @@ class Result:
         return f'<Result(errorcode={self.errcode}{extra})>'
 
     def __gt__(self, other):
-        if isinstance(other, Cmd):
+        if isinstance(other, (Cmd, RemoteCmd)):
             return other.__lt__(self)
         elif isinstance(other, (str, bytes)):
             with open(other, 'wb') as fh:
@@ -461,7 +462,6 @@ class RemoteProcess:
 
         self.to_join = []
         if stdin:
-            # XXX use a real buff (not a simple str) ?
             self.pull_stdin(stdin)
 
     def wait(self):
@@ -471,12 +471,17 @@ class RemoteProcess:
         for stream in (self.stdin, self.stdout, self.stderr):
             stream.flush()
             stream.close()
-        self.chan.shutdown_write()
         return self.errcode
 
     def pull_stdin(self, input_):
-        thread = Streamer(input_).plug(self.stdin, autoclose=True)
+        thread = Streamer(input_).plug(self.stdin, callback=self._close_stdin)
         self.to_join.append(thread)
+
+    def _close_stdin(self):
+        self.stdin.flush()
+        self.stdin.close()
+        self.chan.shutdown_write()
+
 
     def push_stdout(self, output):
         thread = Streamer(self.stdout).plug(output)
