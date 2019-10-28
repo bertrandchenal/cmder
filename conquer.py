@@ -336,7 +336,7 @@ class SSH:
             hostname = host
             username = None
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
         client.connect(hostname, username=username, password=password,
                        key_filename=private_key,
         )
