@@ -1,7 +1,7 @@
 # Conquer
 
 Conquer is a small python3 utility to help run commands. It supports
-Linux, Windows and MacOS.
+Linux, Windows, MacOS and supports running commands over SSH.
 
 It is inspired by [amoffat's sh](https://github.com/amoffat/sh) module.
 
