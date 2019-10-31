@@ -13,5 +13,8 @@ def test_remote_to_local():
 
 def test_local_to_remote():
     localhost = SSH('localhost')
-    cmd = sh.env | localhost.grep + 'PWD'
-    assert len(str(cmd()))
+    cmd = sh.env | localhost.wc -'l'
+    res = str(cmd())
+    local_cmd = sh.env | sh.wc -'l'
+    expected = str(local_cmd())
+    assert res and res == expected

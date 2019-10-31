@@ -14,5 +14,3 @@ def test_func_head():
     cmd = Func(fn) | sh.cat
     res = cmd()
     assert res == '0123456789'
-
-test_func_head()

@@ -25,7 +25,7 @@ class Streamer:
         # handles buffers
         if hasattr(self.in_stream, 'readline'):
             try:
-                for chunk in iter(lambda: self.in_stream.readline(2048), ""):
+                for chunk in iter(lambda: self.in_stream.readline(2048), ''):
                     if not chunk:
                         return
                     yield chunk
@@ -47,7 +47,6 @@ class Streamer:
             write = out_stream.buffer.write if has_buff else out_stream.write
             for chunk in generator:
                 write(chunk)
-                out_stream.flush()
         else:
             raise ValueError('Can not handle "%s"' % out_stream)
 
@@ -58,7 +57,6 @@ class Streamer:
         self.writer(self.reader(), out_stream)
         if callback:
             callback()
-
 
     def plug(self, out_stream, callback=None):
         t = threading.Thread(target=self._plug, args=(out_stream, callback))
@@ -226,9 +224,9 @@ class Process:
         for thread in self.to_join:
             thread.join()
         for stream in (self.stdin, self.stdout, self.stderr):
-            if not stream:
+            if not stream or stream.closed:
                 continue
-            stream.close()
+            stream.flush()
         return self.errcode
 
     def detach(self):
@@ -474,7 +472,8 @@ class RemoteProcess:
         return self.errcode
 
     def pull_stdin(self, input_):
-        thread = Streamer(input_).plug(self.stdin, callback=self._close_stdin)
+        name = 'RemoteProcess.pull_stdin'
+        thread = Streamer(input_, name=name).plug(self.stdin, callback=self._close_stdin)
         self.to_join.append(thread)
 
     def _close_stdin(self):
@@ -482,13 +481,14 @@ class RemoteProcess:
         self.stdin.close()
         self.chan.shutdown_write()
 
-
     def push_stdout(self, output):
-        thread = Streamer(self.stdout).plug(output)
+        name = 'Remote_Process.push_stdout'
+        thread = Streamer(self.stdout, name=name).plug(output)
         self.to_join.append(thread)
 
     def push_stderr(self, output):
-        thread = Streamer(self.stderr).plug(output)
+        name = 'Remote_Process.push_stderr'
+        thread = Streamer(self.stderr, name=name).plug(output)
         self.to_join.append(thread)
 
     def detach(self):
