@@ -344,7 +344,7 @@ class SSH:
 
 
     def get_password(self, host):
-        pass
+        pass  # XXX needed ?
 
     def __getattr__(self, cmd):
         return RemoteCmd(self, cmd)
