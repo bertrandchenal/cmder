@@ -349,6 +349,8 @@ class SSH:
     def __getattr__(self, cmd):
         return RemoteCmd(self, cmd)
 
+    def __call__(self, script):
+        return RemoteCmd(self, script)()
 
 
 class RemoteCmd:
