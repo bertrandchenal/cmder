@@ -66,9 +66,9 @@ class Streamer:
 
 class Cmd:
 
-    def __init__(self, cmd, *args):
-        if os.path.isfile(cmd):
-            self.cmd_path = cmd
+    def __init__(self, cmd, *args, _shell=False):
+        if _shell or os.path.isfile(cmd):
+            self.cmd = cmd
         else:
             if WIN and not cmd.endswith('.exe'):
                 cmd += '.exe'
@@ -82,11 +82,12 @@ class Cmd:
                     break
             else:
                 raise Exception(f'Command not found: {cmd}')
-            self.cmd_path = cmd_path
+            self.cmd = cmd_path
 
         self.args = args
         self.parent= None
         self.redirect_stdin = None
+        self.shell = _shell
 
     def run(self, extra_args=tuple()):
         '''
@@ -104,9 +105,10 @@ class Cmd:
             stdin = parent_func
 
         proc = Process(
-            str(self.cmd_path),
+            self.cmd,
             self.args + extra_args,
             stdin=stdin,
+            shell=self.shell,
         )
 
         if parent_proc:
@@ -114,7 +116,7 @@ class Cmd:
         return proc
 
     def clone(self, *extra_args):
-        return Cmd(self.cmd_path, *(self.args + extra_args))
+        return Cmd(self.cmd, *(self.args + extra_args))
 
     def __call__(self, *extra_args):
         return self.communicate(extra_args)
@@ -175,7 +177,7 @@ class Cmd:
 
     def __str__(self):
         args = ' '.join(self.args)
-        return f'{self.cmd_path} {args}'
+        return f'{self.cmd} {args}'
 
     def __lt__(self, other):
         if isinstance(other, Result):
@@ -187,7 +189,7 @@ class Cmd:
 
 class Process:
 
-    def __init__(self, cmd, args, stdin=None):
+    def __init__(self, cmd, args, stdin=None, shell=False):
         self.cmd = cmd
 
         # Check if stdin is a readable filehandle
@@ -197,6 +199,7 @@ class Process:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=stdin if is_stdin_fh else subprocess.PIPE,
+            shell=shell,
         )
         self.stdout = self.process.stdout
         self.stderr = self.process.stderr
@@ -224,8 +227,6 @@ class Process:
         for thread in self.to_join:
             thread.join()
         for stream in (self.stdin, self.stdout, self.stderr):
-            if not stream or stream.closed:
-                continue
             stream.flush()
         return self.errcode
 
@@ -468,7 +469,6 @@ class RemoteProcess:
             thread.join()
         for stream in (self.stdin, self.stdout, self.stderr):
             stream.flush()
-            stream.close()
         return self.errcode
 
     def pull_stdin(self, input_):
@@ -501,6 +501,10 @@ class SH:
 
     def __getattr__(self, name):
         return Cmd(name)
+
+    def __call__(self, script):
+        return Cmd(script, _shell=True)()
+
 sh = SH()
 
 
