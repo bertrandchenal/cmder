@@ -10,7 +10,7 @@ Linux, Windows and MacOS.
 description = 'Conquer runs commands'
 
 setup(name='Conquer',
-      version='0.0',
+      version='0.0.1',
       description=description,
       long_description=long_description,
       author='Bertrand Chenal',
