@@ -17,5 +17,5 @@ setup(name='Conquer',
       author_email='bertrand@adimian.com',
       url='https://github.com/bertrandchenal/conquer',
       license='MIT',
-      py_modules=['conquer'],
+      packages=['conquer'],
   )

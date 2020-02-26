@@ -507,6 +507,14 @@ class SH:
     def __call__(self, script):
         return Cmd(script, _shell=True)()
 
+class Sudo:
+
+    def __init__(self, user='root'):
+        self.user = user
+
+    def __getattr__(self, name):
+        return Cmd('sudo', '-u', self.user, '--', name)
+
 sh = SH()
 
 
