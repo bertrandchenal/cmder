@@ -29,6 +29,7 @@ class Streamer:
                     if not chunk:
                         return
                     yield chunk
+
             except ValueError:
                 # readline raises a valueerror on closed paramiko chan
                 return
@@ -123,15 +124,7 @@ class Cmd:
 
     def communicate(self, extra_args=tuple()):
         process = self.run(extra_args)
-
-        # Create buffers for stderr and stdout
-        out_buff = io.BytesIO()
-        process.push_stdout(out_buff)
-        err_buff = io.BytesIO()
-        process.push_stderr(err_buff)
-        process.wait()
-        return Result(process.errcode, out_buff.getvalue(),
-                      err_buff.getvalue())
+        return Result(process)
 
     def pipe_cmd(self, cmd, *args):
         # Chain commands
@@ -189,7 +182,7 @@ class Cmd:
 
 class Process:
 
-    def __init__(self, cmd, args, stdin=None, shell=False):
+    def __init__(self, cmd, args=tuple(), stdin=None, shell=False):
         self.cmd = cmd
 
         # Check if stdin is a readable filehandle
@@ -235,6 +228,8 @@ class Process:
         t.start()
         return t
 
+    def kill(self):
+        self.process.kill()
 
 class Func:
 
@@ -272,14 +267,56 @@ class Func:
 
 class Result:
 
-    def __init__(self, errcode, stdout, stderr):
-        self.errcode = errcode
-        self.stdout = stdout
-        self.stderr = stderr
+    def __init__(self, process):
+        self.process = process
+        self._stdout = None
+        self._stderr = None
+        self.waited = False
+
+    def wait(self):
+        # Wait for process and collect stdout/stderr
+        if self.waited:
+            return
+        out_buff = io.BytesIO()
+        err_buff = io.BytesIO()
+        self.process.push_stdout(out_buff)
+        self.process.push_stderr(err_buff)
+        self.process.wait()
+        self._stdout = out_buff.getvalue()
+        self._stderr = err_buff.getvalue()
+        self.waited = True
 
     @property
     def success(self):
-        return self.errcode == 0
+        self.wait()
+        return self.process.errcode == 0
+
+    @property
+    def stdout(self):
+        self.wait()
+        return self._stdout
+
+    @property
+    def stderr(self):
+        self.wait()
+        return self._stderr
+
+    def __iter__(self):
+        # Plug stderr
+        err_buff = io.BytesIO()
+        self.process.push_stderr(err_buff)
+        # Create streamer to consume stdout
+        reader = Streamer(self.process.stdout).reader()
+        thread = self.process.detach()
+        for chunk in reader:
+            yield chunk.decode()
+
+        # Wait for detached thread
+        thread.join()
+        if not self.process.errcode == 0:
+            err = err_buff.getvalue().decode()
+            raise Exception(f'Process failed with error: {err}')
+
 
     def __str__(self):
         return self.stdout.decode()
@@ -305,7 +342,7 @@ class Result:
         elif isinstance(other, (str, bytes)):
             with open(other, 'wb') as fh:
                 fh.write(self.stdout)
-            return self.errcode
+            return self.success
         else:
             raise ValueError(f'Unable to pipe "{other}" of type "{type(other)}"')
 
@@ -385,15 +422,8 @@ class RemoteCmd:
 
     def communicate(self, extra_args=tuple()):
         process = self.run(extra_args)
+        return Result(process)
 
-        # Create buffers for stderr and stdout
-        out_buff = io.BytesIO()
-        process.push_stdout(out_buff)
-        err_buff = io.BytesIO()
-        process.push_stderr(err_buff)
-        process.wait()
-        return Result(process.errcode, out_buff.getvalue(),
-                      err_buff.getvalue())
     def __or__(self, other):
         return self.pipe(other)
 
