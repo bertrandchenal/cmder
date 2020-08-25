@@ -86,7 +86,7 @@ class Cmd:
             self.cmd = cmd_path
 
         self.args = args
-        self.parent= None
+        self.parent = None
         self.redirect_stdin = None
         self.shell = _shell
 
@@ -120,11 +120,15 @@ class Cmd:
         return Cmd(self.cmd, *(self.args + extra_args))
 
     def __call__(self, *extra_args):
-        return self.communicate(extra_args)
-
-    def communicate(self, extra_args=tuple()):
         process = self.run(extra_args)
-        return Result(process)
+        res = Result(process)
+        res.wait()
+        return res
+
+    def bg(self, *extra_args):
+        process = self.run(extra_args)
+        res = Result(process)
+        return res
 
     def pipe_cmd(self, cmd, *args):
         # Chain commands
@@ -273,7 +277,7 @@ class Result:
         self._stderr = None
         self.waited = False
 
-    def wait(self):
+    def wait(self, raise_on_error=True):
         # Wait for process and collect stdout/stderr
         if self.waited:
             return
@@ -281,10 +285,12 @@ class Result:
         err_buff = io.BytesIO()
         self.process.push_stdout(out_buff)
         self.process.push_stderr(err_buff)
-        self.process.wait()
+        errcode = self.process.wait()
         self._stdout = out_buff.getvalue()
         self._stderr = err_buff.getvalue()
         self.waited = True
+        if errcode != 0:
+            raise RuntimeError(self._stderr.decode())
 
     @property
     def success(self):
@@ -308,15 +314,20 @@ class Result:
         # Create streamer to consume stdout
         reader = Streamer(self.process.stdout).reader()
         thread = self.process.detach()
-        for chunk in reader:
-            yield chunk.decode()
+
+        killed = False
+        try:
+            for chunk in reader:
+                yield chunk.decode()
+        except KeyboardInterrupt:
+            self.process.kill()
+            killed = True
 
         # Wait for detached thread
         thread.join()
-        if not self.process.errcode == 0:
-            err = err_buff.getvalue().decode()
-            raise Exception(f'Process failed with error: {err}')
-
+        ok = killed or self.process.errcode == 0
+        if not ok:
+            raise RuntimeError(err_buff.getvalue().decode())
 
     def __str__(self):
         return self.stdout.decode()
@@ -418,11 +429,10 @@ class RemoteCmd:
         return proc
 
     def __call__(self, *extra_args):
-        return self.communicate(extra_args)
-
-    def communicate(self, extra_args=tuple()):
         process = self.run(extra_args)
-        return Result(process)
+        res = Result(process)
+        res.wait()
+        return res
 
     def __or__(self, other):
         return self.pipe(other)
@@ -549,4 +559,5 @@ sh = SH()
 
 
 if __name__ == '__main__':
-    print(Cmd(*sys.argv[1:]).communicate())
+    cmd = Cmd(*sys.argv[1:])
+    print(cmd())
