@@ -307,6 +307,9 @@ class Result:
         self.wait()
         return self._stderr
 
+    def kill(self):
+        self.process.kill()
+
     def __iter__(self):
         # Plug stderr
         err_buff = io.BytesIO()
