@@ -57,22 +57,39 @@ print(cmd())              # Same result as running `ls | wc`
 ```
 
 
-## Low-level API
+## SSH
 
-You can instantiate Cmd object manually, by default they print stdout
-and stderr to the respective streams of current process.
+You can also create an SSH object and use it in the same fashion:
 
-So if you save this in `test.py`:
 
-```python
-from conquer import Cmd
-cmd = Cmd('ls', '-l', '/').pipe('head', '-3')
-cmd.run()
+``` python
+from conquer import SSH
+
+ssh = SSH('localhost')
+print(ssh.echo('$SHELL')) # -> /bin/bash
 ```
 
-You can execute it like this:
 
-    $ python test.py
-    total 104
-    drwxr-xr-x   2 root root  4096 aoû 20  2018 bin
-    drwxr-xr-x   4 root root  4096 aoû 25  2018 boot
+Piping works across local and remote:
+
+
+```python
+from conquer import sh, SSH
+
+ssh = SSH('localhost')
+cmd = sh.env | ssh.grep + "SSH"
+print(cmd())
+
+cmd = ssh.env | sh.grep + "SSH"
+print(cmd())
+```
+
+Which prints:
+
+```
+SSH_AUTH_SOCK=/tmp/ssh-pbTptmrP2U0x/agent.397331
+SSH_AGENT_PID=397376
+
+SSH_CONNECTION=::1 46554 ::1 22
+SSH_CLIENT=::1 46554 22
+```

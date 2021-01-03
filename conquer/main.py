@@ -250,7 +250,7 @@ class Func:
     def run(self, args=tuple()):
         if self.parent:
             parent_proc = self.parent.run()
-            stdin = parent_proc.process.stdout
+            stdin = parent_proc.stdout
             reader = Streamer(stdin).reader()
             parent_proc.detach()
             for chunk in reader:
@@ -348,7 +348,7 @@ class Result:
         if self.stderr:
             stderr = ellipsis(repr(self.stderr)[2:-1])
             extra += f" stderr='{stderr}'"
-        return f'<Result(errorcode={self.errcode}{extra})>'
+        return f'<Result(errorcode={self.process.errcode}{extra})>'
 
     def __gt__(self, other):
         if isinstance(other, (Cmd, RemoteCmd)):
@@ -419,7 +419,7 @@ class RemoteCmd:
             stdin = self.redirect_stdin
         elif self.parent and isinstance(self.parent, (Cmd, RemoteCmd)):
             parent_proc = self.parent.run()
-            stdin = parent_proc.process.stdout
+            stdin = parent_proc.stdout
         elif self.parent and isinstance(self.parent, Func):
             parent_func = self.parent.run()
             stdin = parent_func
